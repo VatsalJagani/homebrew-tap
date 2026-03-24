@@ -14,30 +14,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate resource blocks
+        id: resources
+        run: |
+          pip install homebrew-pypi-poet typer rich
+          RESOURCES=$(poet --resources typer --also rich)
+          # Write to file to preserve formatting
+          echo "$RESOURCES" > /tmp/resources.rb
+
       - name: Update disktree formula
         run: |
           VERSION="${{ github.event.client_payload.version }}"
           SHA256="${{ github.event.client_payload.sha256 }}"
           REPO="${{ github.event.client_payload.repo }}"
+          RESOURCES=$(cat /tmp/resources.rb)
 
           mkdir -p Formula
 
-          cat > Formula/disktree.rb << 'FORMULA'
+          cat > Formula/disktree.rb << FORMULA
           class Disktree < Formula
             include Language::Python::Virtualenv
 
             desc "Drill-down storage inspector for macOS"
-            homepage "https://github.com/REPO_PLACEHOLDER"
-            url "https://github.com/REPO_PLACEHOLDER/archive/refs/tags/vVERSION_PLACEHOLDER.tar.gz"
-            sha256 "SHA256_PLACEHOLDER"
+            homepage "https://github.com/${REPO}"
+            url "https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
+            sha256 "${SHA256}"
             license "MIT"
 
             depends_on "python@3"
 
+          $(echo "$RESOURCES" | sed 's/^/  /')
+
             def install
-              virtualenv_create(libexec, "python3")
-              system libexec/"bin/pip", "install", *std_pip_args(prefix: libexec), "."
-              bin.install_symlink Dir[libexec/"bin/disktree"]
+              virtualenv_install_with_resources
             end
 
             test do
@@ -45,11 +59,6 @@ jobs:
             end
           end
           FORMULA
-
-          # Replace placeholders
-          sed -i "s|REPO_PLACEHOLDER|${REPO}|g" Formula/disktree.rb
-          sed -i "s|VERSION_PLACEHOLDER|${VERSION}|g" Formula/disktree.rb
-          sed -i "s|SHA256_PLACEHOLDER|${SHA256}|g" Formula/disktree.rb
 
           # Fix indentation (remove leading spaces from heredoc)
           sed -i 's/^          //' Formula/disktree.rb
