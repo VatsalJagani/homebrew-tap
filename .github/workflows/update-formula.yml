@@ -24,6 +24,8 @@ jobs:
 
           cat > Formula/disktree.rb << 'FORMULA'
           class Disktree < Formula
+            include Language::Python::Virtualenv
+
             desc "Drill-down storage inspector for macOS"
             homepage "https://github.com/REPO_PLACEHOLDER"
             url "https://github.com/REPO_PLACEHOLDER/archive/refs/tags/vVERSION_PLACEHOLDER.tar.gz"

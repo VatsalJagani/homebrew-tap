@@ -1,4 +1,6 @@
 class Disktree < Formula
+  include Language::Python::Virtualenv
+
   desc "Drill-down storage inspector for macOS"
   homepage "https://github.com/VatsalJagani/mac-disktree"
   url "https://github.com/VatsalJagani/mac-disktree/archive/refs/tags/v0.1.0.tar.gz"
