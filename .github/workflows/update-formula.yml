@@ -1,0 +1,61 @@
+name: Update Formula
+
+on:
+  repository_dispatch:
+    types: [formula-update]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update disktree formula
+        run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          SHA256="${{ github.event.client_payload.sha256 }}"
+          REPO="${{ github.event.client_payload.repo }}"
+
+          mkdir -p Formula
+
+          cat > Formula/disktree.rb << 'FORMULA'
+          class Disktree < Formula
+            desc "Drill-down storage inspector for macOS"
+            homepage "https://github.com/REPO_PLACEHOLDER"
+            url "https://github.com/REPO_PLACEHOLDER/archive/refs/tags/vVERSION_PLACEHOLDER.tar.gz"
+            sha256 "SHA256_PLACEHOLDER"
+            license "MIT"
+
+            depends_on "python@3"
+
+            def install
+              virtualenv_create(libexec, "python3")
+              system libexec/"bin/pip", "install", *std_pip_args(prefix: libexec), "."
+              bin.install_symlink Dir[libexec/"bin/disktree"]
+            end
+
+            test do
+              assert_match "disktree", shell_output("#{bin}/disktree --help")
+            end
+          end
+          FORMULA
+
+          # Replace placeholders
+          sed -i "s|REPO_PLACEHOLDER|${REPO}|g" Formula/disktree.rb
+          sed -i "s|VERSION_PLACEHOLDER|${VERSION}|g" Formula/disktree.rb
+          sed -i "s|SHA256_PLACEHOLDER|${SHA256}|g" Formula/disktree.rb
+
+          # Fix indentation (remove leading spaces from heredoc)
+          sed -i 's/^          //' Formula/disktree.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/disktree.rb
+          git commit -m "Update disktree to ${{ github.event.client_payload.version }}"
+          git push
