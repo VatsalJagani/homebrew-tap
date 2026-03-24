@@ -46,7 +46,7 @@ jobs:
             sha256 "${SHA256}"
             license "MIT"
 
-            depends_on "python@3"
+            depends_on "python@3.14"
 
           $(echo "$RESOURCES" | sed 's/^/  /')
 
