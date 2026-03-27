@@ -19,13 +19,73 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate resource blocks
+      - name: Generate wheel-based resource blocks
         id: resources
         run: |
-          pip install homebrew-pypi-poet typer rich
-          RESOURCES=$(poet --resources typer --also rich)
-          # Write to file to preserve formatting
-          echo "$RESOURCES" > /tmp/resources.rb
+          # Resolve all dependencies for typer and rich (the direct deps of disktree)
+          pip download --no-deps --only-binary :all: --dest /tmp/wheels typer rich 2>&1
+
+          # Collect all transitive dependencies as wheels
+          pip download --only-binary :all: --dest /tmp/wheels typer rich 2>&1
+
+          # Generate resource blocks from downloaded wheels using PyPI JSON API
+          python3 << 'PYSCRIPT'
+          import json, urllib.request, os, hashlib, re
+
+          wheels_dir = "/tmp/wheels"
+          resources = []
+          seen = set()
+
+          for filename in sorted(os.listdir(wheels_dir)):
+              if not filename.endswith(".whl"):
+                  continue
+
+              # Parse package name and version from wheel filename
+              parts = filename.split("-")
+              name = parts[0].replace("_", "-").lower()
+              version = parts[1]
+
+              if name in seen:
+                  continue
+              seen.add(name)
+
+              # Skip packages that are part of the Python stdlib
+              if name in ("pip", "setuptools", "wheel"):
+                  continue
+
+              # Get the wheel URL from PyPI
+              pypi_url = f"https://pypi.org/pypi/{name}/{version}/json"
+              try:
+                  data = json.loads(urllib.request.urlopen(pypi_url).read())
+              except Exception:
+                  # Try original name casing from PyPI
+                  continue
+
+              whl_url = None
+              whl_sha256 = None
+              for f in data["urls"]:
+                  if f["filename"].endswith(".whl"):
+                      whl_url = f["url"]
+                      whl_sha256 = f["digests"]["sha256"]
+                      break
+
+              if not whl_url:
+                  # Fallback to source tarball if no wheel available
+                  for f in data["urls"]:
+                      if f["filename"].endswith(".tar.gz"):
+                          whl_url = f["url"]
+                          whl_sha256 = f["digests"]["sha256"]
+                          break
+
+              if whl_url:
+                  # Use PyPI display name for the resource name
+                  display_name = data["info"]["name"]
+                  resources.append(f'  resource "{display_name}" do\n    url "{whl_url}"\n    sha256 "{whl_sha256}"\n  end')
+
+          output = "\n\n".join(resources)
+          with open("/tmp/resources.rb", "w") as f:
+              f.write(output)
+          PYSCRIPT
 
       - name: Update disktree formula
         run: |
@@ -48,7 +108,7 @@ jobs:
 
             depends_on "python@3.14"
 
-          $(echo "$RESOURCES" | sed 's/^/  /')
+          ${RESOURCES}
 
             def install
               virtualenv_install_with_resources
